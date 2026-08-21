@@ -1,0 +1,67 @@
+{
+    "schemaVersion": "1.0.0",
+    "storeId": "store_abc123",
+    "version": 3,
+
+    "meta": {
+        "name": "My Bakery"
+    },
+
+    "theme": {
+        "colors": {
+            "primary": "#7c3aed",
+            "background": "#ffffff",
+            "text": "#111827"
+        },
+        "fonts": {
+            "heading": "Poppins",
+            "body": "Inter"
+        }
+    },
+
+    "pages": [
+        {
+            "id": "page_home",
+            "slug": "/",
+            "title": "My Bakery — Home",
+
+            "sections": [
+                {
+                    "id": "sec_1",
+                    "type": "hero",
+                    "props": {
+                        "heading": "Fresh Bread, Every Morning",
+                        "subheading": "Baked daily with love.",
+                        "imageUrl": "/images/hero.jpg",
+                        "ctaText": "Order Now",
+                        "ctaHref": "/products"
+                    }
+                },
+                {
+                    "id": "sec_2",
+                    "type": "product-grid",
+                    "props": {
+                        "title": "Best Sellers",
+                        "columns": 3,
+                        "categoryId": "cat_bakery"
+                    }
+                },
+                {
+                    "id": "sec_3",
+                    "type": "text-block",
+                    "props": {
+                        "heading": "About Us",
+                        "body": "Baked fresh every morning."
+                    }
+                },
+                {
+                    "id": "sec_4",
+                    "type": "footer",
+                    "props": {
+                        "copyrightText": "© 2026 My Bakery"
+                    }
+                }
+            ]
+        }
+    ]
+}
