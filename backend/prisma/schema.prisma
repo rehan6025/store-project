@@ -11,3 +11,155 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+model User {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  passwordHash String?  @map("password_hash")
+  role         String
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  stores Store[]
+
+  @@map("users")
+}
+
+model Store {
+  id             Int      @id @default(autoincrement())
+  ownerUserId    Int      @map("owner_user_id")
+  name           String
+  slug           String
+  plan           String
+  allowsDelivery Boolean  @default(false) @map("allows_delivery")
+  allowsPickup   Boolean  @default(false) @map("allows_pickup")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  owner       User?       @relation(fields: [ownerUserId], references: [id])
+  customers   Customer[]
+  products    Product[]
+  categories  Category[]
+  inventories Inventory[]
+  carts       Cart[]
+
+  @@map("stores")
+}
+
+model Customer {
+  id           Int      @id @default(autoincrement())
+  storeId      Int      @map("store_id")
+  name         String
+  phone        String
+  email        String
+  passwordHash String?  @map("password_hash")
+  address      String
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  store Store  @relation(fields: [storeId], references: [id])
+  carts Cart[]
+
+  @@unique([storeId, email])
+  @@map("customers")
+}
+
+model Product {
+  id                Int               @id @default(autoincrement())
+  storeId           Int               @map("store_id")
+  name              String
+  slug              String
+  description       String
+  price             Decimal
+  currency          String
+  imageUrl          String?           @map("image_url")
+  status            ProductStatus     @default(ACTIVE)
+  store             Store             @relation(fields: [storeId], references: [id])
+  inventories       Inventory[]
+  productCategories ProductCategory[]
+  cartItems         CartItem[]
+
+  @@unique([storeId, slug])
+  @@map("products")
+}
+
+enum ProductStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+model Category {
+  id        Int      @id @default(autoincrement())
+  storeId   Int      @map("store_id")
+  name      String
+  slug      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  store             Store             @relation(fields: [storeId], references: [id])
+  productCategories ProductCategory[]
+
+  @@unique([storeId, slug])
+  @@map("categories")
+}
+
+model Inventory {
+  id            Int      @id @default(autoincrement())
+  storeId       Int      @map("store_id")
+  productId     Int      @map("product_id")
+  stockCount    Int      @default(0) @map("stock_count")
+  reservedCount Int      @default(0) @map("reserved_count")
+  version       Int      @default(0)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  store   Store   @relation(fields: [storeId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  @@unique([storeId, productId])
+  @@map("inventories")
+}
+
+model ProductCategory {
+  productId  Int @map("product_id")
+  categoryId Int @map("category_id")
+
+  product  Product  @relation(fields: [productId], references: [id])
+  category Category @relation(fields: [categoryId], references: [id])
+
+  @@unique([productId, categoryId])
+  @@map("product_categories")
+}
+
+model Cart {
+  id         Int        @id @default(autoincrement())
+  storeId    Int        @map("store_id")
+  customerId Int        @map("customer_id")
+  status     CartStatus @default(ACTIVE)
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+
+  store     Store      @relation(fields: [storeId], references: [id])
+  customer  Customer   @relation(fields: [customerId], references: [id])
+  cartItems CartItem[]
+
+  @@unique([storeId, customerId])
+  @@map("carts")
+}
+
+enum CartStatus {
+  ACTIVE
+}
+
+model CartItem {
+  id        Int      @id @default(autoincrement())
+  cartId    Int      @map("cart_id")
+  productId Int      @map("product_id")
+  quantity  Int
+  unitPrice Decimal  @map("unit_price")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  cart    Cart    @relation(fields: [cartId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  @@unique([cartId, productId])
+  @@map("cart_items")
+}
+
+//next now order and order item and payment next 
