@@ -5,10 +5,36 @@ const prisma = new PrismaClient({
 });
 
 async function main() {
-    await prisma.user.create({
+    //two store owners
+    const ownerA = await prisma.user.create({
         data: {
             email: "user1@example.com",
             role: "owner",
+        },
+    });
+    const ownerB = await prisma.user.create({
+        data: {
+            email: "user2@example.com",
+            role: "owner",
+        },
+    });
+
+    //store of owner a
+    await prisma.store.create({
+        data: {
+            ownerUserId: ownerA.id,
+            name: "Venus Bakers",
+            slug: "venus-bakers",
+            plan: "basic",
+        },
+    });
+
+    await prisma.store.create({
+        data: {
+            ownerUserId: ownerB.id,
+            name: "Janta Bakers",
+            slug: "janta-bakers",
+            plan: "basic",
         },
     });
 }
