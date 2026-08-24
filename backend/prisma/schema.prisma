@@ -42,8 +42,20 @@ model Store {
   carts       Cart[]
   orders      Order[]
   flashSales  FlashSale[]
+  domains     Domain[]
 
   @@map("stores")
+}
+
+model Domain {
+  id        Int      @id @default(autoincrement())
+  storeId   Int      @map("store_id")
+  hostname  String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  store Store @relation(fields: [storeId], references: [id])
+
+  @@map("domains")
 }
 
 model Customer {
