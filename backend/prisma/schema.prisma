@@ -193,10 +193,11 @@ model Order {
   createdAt               DateTime         @default(now()) @map("created_at")
   updatedAt               DateTime         @updatedAt @map("updated_at")
 
-  store      Store       @relation(fields: [storeId], references: [id])
-  customer   Customer    @relation(fields: [customerId], references: [id])
-  orderItems OrderItem[]
-  payments   Payment[]
+  store        Store         @relation(fields: [storeId], references: [id])
+  customer     Customer      @relation(fields: [customerId], references: [id])
+  orderItems   OrderItem[]
+  payments     Payment[]
+  reservations Reservation[]
 
   @@map("orders")
 }
@@ -256,14 +257,16 @@ enum PaymentStatus {
 }
 
 model FlashSale {
-  id         Int      @id @default(autoincrement())
-  storeId    Int      @map("store_id")
-  productId  Int      @map("product_id")
-  startsAt   DateTime @map("starts_at")
-  endsAt     DateTime @map("ends_at")
-  salePrice  Decimal  @map("sale_price")
-  stockLimit Int      @map("stock_limit")
-  createdAt  DateTime @default(now()) @map("created_at")
+  id                  Int      @id @default(autoincrement())
+  storeId             Int      @map("store_id")
+  productId           Int      @map("product_id")
+  startsAt            DateTime @map("starts_at")
+  endsAt              DateTime @map("ends_at")
+  salePrice           Decimal  @map("sale_price")
+  stockLimit          Int      @map("stock_limit")
+  reservationQuantity Int      @map("reservation_quantity")
+  soldQuantity        Int      @map("sold_quantity")
+  createdAt           DateTime @default(now()) @map("created_at")
 
   store        Store         @relation(fields: [storeId], references: [id])
   product      Product       @relation(fields: [productId], references: [id])
@@ -276,11 +279,13 @@ model Reservation {
   id          Int               @id @default(autoincrement())
   flashSaleId Int               @map("flash_sale_id")
   customerId  Int               @map("customer_id")
+  order_id    Int               @map("order_id")
   quantity    Int
   status      ReservationStatus @default(RESERVED)
   expiresAt   DateTime          @map("expires_at")
   createdAt   DateTime          @map("created_at")
 
+  order     Order      @relation(fields: [order_id], references: [id])
   flashSale FlashSale? @relation(fields: [flashSaleId], references: [id])
   customer  Customer   @relation(fields: [customerId], references: [id])
 }
