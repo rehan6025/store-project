@@ -34,16 +34,49 @@ model Store {
   allowsPickup   Boolean  @default(false) @map("allows_pickup")
   createdAt      DateTime @default(now()) @map("created_at")
 
-  owner       User?       @relation(fields: [ownerUserId], references: [id])
-  customers   Customer[]
-  products    Product[]
-  categories  Category[]
-  inventories Inventory[]
-  carts       Cart[]
-  orders      Order[]
-  flashSales  FlashSale[]
+  owner        User?         @relation(fields: [ownerUserId], references: [id])
+  customers    Customer[]
+  products     Product[]
+  categories   Category[]
+  inventories  Inventory[]
+  carts        Cart[]
+  orders       Order[]
+  flashSales   FlashSale[]
+  domains      Domain[]
+  storeConfigs StoreConfig[]
 
   @@map("stores")
+}
+
+model StoreConfig {
+  id            Int      @id @default(autoincrement())
+  storeId       Int      @map("store_id")
+  version       Int
+  schemaVersion String   @map("schema_version")
+  contentJson   Json     @map("content_json")
+  status        String
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @default(now()) @map("updated_at")
+
+  store Store @relation(fields: [storeId], references: [id])
+
+  @@map("store_configs")
+}
+
+enum StoreConfigStatus {
+  ACTIVE
+  BACKUP
+}
+
+model Domain {
+  id        Int      @id @default(autoincrement())
+  storeId   Int      @map("store_id")
+  hostname  String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  store Store @relation(fields: [storeId], references: [id])
+
+  @@map("domains")
 }
 
 model Customer {
@@ -76,7 +109,7 @@ model Product {
   imageUrl          String?           @map("image_url")
   status            ProductStatus     @default(ACTIVE)
   store             Store             @relation(fields: [storeId], references: [id])
-  inventories       Inventory[]
+  inventories       Inventory?
   productCategories ProductCategory[]
   cartItems         CartItem[]
   orderItems        OrderItem[]
@@ -108,7 +141,7 @@ model Category {
 model Inventory {
   id            Int      @id @default(autoincrement())
   storeId       Int      @map("store_id")
-  productId     Int      @map("product_id")
+  productId     Int      @unique @map("product_id")
   stockCount    Int      @default(0) @map("stock_count")
   reservedCount Int      @default(0) @map("reserved_count")
   version       Int      @default(0)
@@ -181,10 +214,11 @@ model Order {
   createdAt               DateTime         @default(now()) @map("created_at")
   updatedAt               DateTime         @updatedAt @map("updated_at")
 
-  store      Store       @relation(fields: [storeId], references: [id])
-  customer   Customer    @relation(fields: [customerId], references: [id])
-  orderItems OrderItem[]
-  payments   Payment[]
+  store        Store         @relation(fields: [storeId], references: [id])
+  customer     Customer      @relation(fields: [customerId], references: [id])
+  orderItems   OrderItem[]
+  payments     Payment[]
+  reservations Reservation[]
 
   @@map("orders")
 }
@@ -209,7 +243,7 @@ model OrderItem {
   orderId         Int      @map("order_id")
   productId       Int      @map("product_id")
   quantity        Int
-  priceAtPurchase Int      @map("price_at_purchase")
+  priceAtPurchase Decimal  @map("price_at_purchase")
   createdAt       DateTime @default(now()) @map("created_at")
 
   order   Order   @relation(fields: [orderId], references: [id])
@@ -244,14 +278,16 @@ enum PaymentStatus {
 }
 
 model FlashSale {
-  id         Int      @id @default(autoincrement())
-  storeId    Int      @map("store_id")
-  productId  Int      @map("product_id")
-  startsAt   DateTime @map("starts_at")
-  endsAt     DateTime @map("ends_at")
-  salePrice  Decimal  @map("sale_price")
-  stockLimit Int      @map("stock_limit")
-  createdAt  DateTime @default(now()) @map("created_at")
+  id                  Int      @id @default(autoincrement())
+  storeId             Int      @map("store_id")
+  productId           Int      @map("product_id")
+  startsAt            DateTime @map("starts_at")
+  endsAt              DateTime @map("ends_at")
+  salePrice           Decimal  @map("sale_price")
+  stockLimit          Int      @map("stock_limit")
+  reservationQuantity Int      @map("reservation_quantity")
+  soldQuantity        Int      @map("sold_quantity")
+  createdAt           DateTime @default(now()) @map("created_at")
 
   store        Store         @relation(fields: [storeId], references: [id])
   product      Product       @relation(fields: [productId], references: [id])
@@ -264,11 +300,13 @@ model Reservation {
   id          Int               @id @default(autoincrement())
   flashSaleId Int               @map("flash_sale_id")
   customerId  Int               @map("customer_id")
+  order_id    Int               @map("order_id")
   quantity    Int
   status      ReservationStatus @default(RESERVED)
   expiresAt   DateTime          @map("expires_at")
   createdAt   DateTime          @map("created_at")
 
+  order     Order      @relation(fields: [order_id], references: [id])
   flashSale FlashSale? @relation(fields: [flashSaleId], references: [id])
   customer  Customer   @relation(fields: [customerId], references: [id])
 }
