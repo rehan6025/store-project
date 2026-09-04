@@ -24,26 +24,33 @@ model User {
   @@map("users")
 }
 
-model Store {
-  id             Int      @id @default(autoincrement())
-  ownerUserId    Int      @map("owner_user_id")
-  name           String
-  slug           String
-  plan           String
-  allowsDelivery Boolean  @default(false) @map("allows_delivery")
-  allowsPickup   Boolean  @default(false) @map("allows_pickup")
-  createdAt      DateTime @default(now()) @map("created_at")
+enum StorePlan {
+  BASIC
+  PRO
+  ENTERPRISE
+}
 
-  owner        User?         @relation(fields: [ownerUserId], references: [id])
-  customers    Customer[]
-  products     Product[]
-  categories   Category[]
-  inventories  Inventory[]
-  carts        Cart[]
-  orders       Order[]
-  flashSales   FlashSale[]
-  domains      Domain[]
-  storeConfigs StoreConfig[]
+model Store {
+  id             Int       @id @default(autoincrement())
+  ownerUserId    Int       @map("owner_user_id")
+  name           String
+  slug           String    @unique
+  plan           StorePlan @default(BASIC)
+  allowsDelivery Boolean   @default(false) @map("allows_delivery")
+  allowsPickup   Boolean   @default(false) @map("allows_pickup")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  owner         User?          @relation(fields: [ownerUserId], references: [id])
+  customers     Customer[]
+  products      Product[]
+  categories    Category[]
+  inventories   Inventory[]
+  carts         Cart[]
+  orders        Order[]
+  flashSales    FlashSale[]
+  domains       Domain[]
+  storeConfigs  StoreConfig[]
+  slugRedirects SlugRedirect[]
 
   @@map("stores")
 }
@@ -77,6 +84,17 @@ model Domain {
   store Store @relation(fields: [storeId], references: [id])
 
   @@map("domains")
+}
+
+model SlugRedirect {
+  id        Int      @id @default(autoincrement())
+  slug      String   @unique
+  storeId   Int      @map("store_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@map("slug_redirects")
 }
 
 model Customer {
