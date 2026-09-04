@@ -7,7 +7,9 @@ import {
     Patch,
     Post,
     Query,
+    Res,
 } from "@nestjs/common";
+import type { Response } from "express";
 import { StoreService } from "./stores.service.js";
 
 @Controller("stores")
@@ -28,6 +30,14 @@ export class StoresController {
     @Get(":id")
     getStoreById(@Param("id") id: string) {
         return this.storeService.getStoreById(Number(id));
+    }
+
+    @Get("slug/:slug")
+    async getStoreBySlug(@Param("slug") slug: string, @Res() res: Response) {
+        const result = await this.storeService.getStoreBySlug(slug);
+        if(result.isRedirect === false) return res.status(200).json(result.store);
+
+        return res.redirect(301,`/stores/slug/${result.redirectToSlug}`)
     }
 
     @Post()
