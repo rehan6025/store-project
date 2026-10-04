@@ -4,7 +4,10 @@
     "description": "",
     "main": "index.js",
     "scripts": {
-        "test": "vitest run",
+        
+        "test": "vitest run --exclude '**/*.integration.spec.ts'",
+        "test:unit": "vitest run --exclude '**/*.integration.spec.ts'",
+        "test:integration": "vitest run '**/*.integration.spec.ts'",
         "test:watch": "vitest",
         "test:cov": "vitest run --coverage",
         "dev": "nest start --watch",
