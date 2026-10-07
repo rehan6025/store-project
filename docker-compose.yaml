@@ -12,6 +12,13 @@ services:
             - "5435:5432"
         volumes:
             - postgres_data:/var/lib/postgresql
+    
+    redis:
+        image: redis:7-alipne
+        container_name: store-builder-redis
+        restart: always
+        ports:
+            - "6379:6379"
 
 volumes:
     postgres_data:

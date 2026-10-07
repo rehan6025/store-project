@@ -4,7 +4,6 @@
     "description": "",
     "main": "index.js",
     "scripts": {
-        
         "test": "vitest run --exclude '**/*.integration.spec.ts'",
         "test:unit": "vitest run --exclude '**/*.integration.spec.ts'",
         "test:integration": "vitest run '**/*.integration.spec.ts'",
@@ -29,8 +28,10 @@
         "argon2": "^0.45.1",
         "dotenv": "^17.4.2",
         "pg": "^8.23.0",
+        "redis": "^6.3.0",
         "reflect-metadata": "^0.2.2",
-        "rxjs": "^7.8.2"
+        "rxjs": "^7.8.2",
+        "zod": "^4.6.5"
     },
     "devDependencies": {
         "@nestjs/cli": "^12.0.0",
