@@ -12,10 +12,14 @@ import {
 } from "./store-config.types.js";
 import type { PublishConfigInput } from "./dto/publish-config.dto.js";
 import type { RollbackConfigInput } from "./dto/rollback-config.dto.js";
+import type { RedisService } from "../redis/redis.service.js";
 
 @Injectable()
 export class StoreConfigService {
-    constructor(private readonly repository: StoreConfigRepository) {}
+    constructor(
+        private readonly repository: StoreConfigRepository,
+        private readonly redis: RedisService
+    ) {}
 
     // Public: Fetch currently active store configuration by numeric store ID
     async getActiveConfig(storeId: number): Promise<StoreSchemaResponse> {
@@ -23,6 +27,9 @@ export class StoreConfigService {
         if (!store) {
             throw new NotFoundException("Store not found");
         }
+
+        const cached = await this.redis.get<StoreSchemaResponse>(this.getCacheKey(storeId))
+        if(cached) return cached
 
         const activeConfig = await this.repository.findActiveConfig(storeId);
 
@@ -39,7 +46,7 @@ export class StoreConfigService {
         }
 
         const content = activeConfig.contentJson as unknown as StoreConfigContent;
-        return {
+        const response = {
             schemaVersion: activeConfig.schemaVersion,
             storeId: String(store.id),
             version: activeConfig.version,
@@ -47,6 +54,8 @@ export class StoreConfigService {
             theme: content?.theme ?? DEFAULT_STORE_CONFIG_CONTENT.theme,
             pages: content?.pages ?? DEFAULT_STORE_CONFIG_CONTENT.pages,
         };
+        await this.redis.set(this.getCacheKey(storeId), response, 3600)
+        return response
     }
 
     // Public: Fetch currently active store configuration by store slug
@@ -86,7 +95,7 @@ export class StoreConfigService {
             throw new ForbiddenException("You are not the owner of this store");
         }
 
-        return await this.repository.client.$transaction(async (tx) => {
+        const response = await this.repository.client.$transaction(async (tx) => {
             const latest = await tx.storeConfig.findFirst({
                 where: { storeId },
                 orderBy: { version: "desc" },
@@ -126,6 +135,10 @@ export class StoreConfigService {
                 pages: content?.pages ?? DEFAULT_STORE_CONFIG_CONTENT.pages,
             };
         });
+
+        await this.redis.del(this.getCacheKey(storeId));
+
+        return response;
     }
 
     // Protected: Merchant rolls back to a previous revision (Forward-only restoration)
@@ -152,7 +165,7 @@ export class StoreConfigService {
             );
         }
 
-        return await this.repository.client.$transaction(async (tx) => {
+        const response = await this.repository.client.$transaction(async (tx) => {
             const latest = await tx.storeConfig.findFirst({
                 where: { storeId },
                 orderBy: { version: "desc" },
@@ -192,5 +205,15 @@ export class StoreConfigService {
                 pages: content?.pages ?? DEFAULT_STORE_CONFIG_CONTENT.pages,
             };
         });
+
+        await this.redis.del(this.getCacheKey(storeId));
+
+        return response;
     }
+
+
+    private getCacheKey(storeId: number): string {
+        return `store:config:${storeId}`;
+    }
+
 }

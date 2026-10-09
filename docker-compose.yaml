@@ -14,7 +14,7 @@ services:
             - postgres_data:/var/lib/postgresql
     
     redis:
-        image: redis:7-alipne
+        image: redis:7-alpine
         container_name: store-builder-redis
         restart: always
         ports:
