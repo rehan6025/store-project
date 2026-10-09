@@ -1,4 +1,5 @@
 import {
+    BadRequestException,
     ForbiddenException,
     Injectable,
     NotFoundException,
@@ -12,7 +13,8 @@ import {
 } from "./store-config.types.js";
 import type { PublishConfigInput } from "./dto/publish-config.dto.js";
 import type { RollbackConfigInput } from "./dto/rollback-config.dto.js";
-import type { RedisService } from "../redis/redis.service.js";
+import { RedisService } from "../redis/redis.service.js";
+import { SCHEMA_VALIDATORS } from "./store-config.validator.js";
 
 @Injectable()
 export class StoreConfigService {
@@ -33,29 +35,19 @@ export class StoreConfigService {
 
         const activeConfig = await this.repository.findActiveConfig(storeId);
 
-        // Fallback: If no config was ever seeded/published, serve the platform default template
-        if (!activeConfig) {
-            return {
-                schemaVersion: "1.0.0",
-                storeId: String(store.id),
-                version: 1,
-                meta: { name: store.name },
-                theme: DEFAULT_STORE_CONFIG_CONTENT.theme,
-                pages: DEFAULT_STORE_CONFIG_CONTENT.pages,
-            };
-        }
-
-        const content = activeConfig.contentJson as unknown as StoreConfigContent;
-        const response = {
-            schemaVersion: activeConfig.schemaVersion,
+        const content = activeConfig?.contentJson as unknown as StoreConfigContent;
+        const response: StoreSchemaResponse = {
+            schemaVersion: activeConfig?.schemaVersion ?? "1.0.0",
             storeId: String(store.id),
-            version: activeConfig.version,
+            version: activeConfig?.version ?? 1,
             meta: content?.meta ?? { name: store.name },
             theme: content?.theme ?? DEFAULT_STORE_CONFIG_CONTENT.theme,
             pages: content?.pages ?? DEFAULT_STORE_CONFIG_CONTENT.pages,
         };
-        await this.redis.set(this.getCacheKey(storeId), response, 3600)
-        return response
+
+        await this.redis.set(this.getCacheKey(storeId), response, 3600);
+        return response;
+
     }
 
     // Public: Fetch currently active store configuration by store slug
@@ -93,6 +85,18 @@ export class StoreConfigService {
         }
         if (store.ownerUserId !== userId) {
             throw new ForbiddenException("You are not the owner of this store");
+        }
+
+        const validator = SCHEMA_VALIDATORS[input.schemaVersion ?? "1.0.0"]
+
+        if(!validator){
+            throw new BadRequestException("Unsupported schema version")
+        }
+
+        const parsed = validator.safeParse(input.contentJson)
+
+        if(!parsed.success){
+            throw new BadRequestException(parsed.error.flatten())
         }
 
         const response = await this.repository.client.$transaction(async (tx) => {

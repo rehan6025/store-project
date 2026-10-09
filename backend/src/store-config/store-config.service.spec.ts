@@ -1,10 +1,11 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { ForbiddenException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { StoreConfigService } from "./store-config.service.js";
 import { StoreConfigRepository } from "./store-config.repository.js";
 import { StoreConfigStatus } from "../../generated/prisma/enums.js";
 import { DEFAULT_STORE_CONFIG_CONTENT } from "./store-config.types.js";
+import { RedisService } from "../redis/redis.service.js";
 
 describe("StoreConfigService", () => {
     let service: StoreConfigService;
@@ -29,6 +30,13 @@ describe("StoreConfigService", () => {
         },
     };
 
+    const redisMock = {
+        get: vi.fn(),
+        set: vi.fn(),
+        del: vi.fn(),
+    };
+
+
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
             providers: [
@@ -37,6 +45,7 @@ describe("StoreConfigService", () => {
                     provide: StoreConfigRepository,
                     useValue: repositoryMock,
                 },
+                {provide: RedisService, useValue: redisMock}
             ],
         }).compile();
 
@@ -228,4 +237,85 @@ describe("StoreConfigService", () => {
             });
         });
     });
+
+    describe("Redis Caching", () => {
+        it("should return cached config without querying database on cache hit", async () => {
+            repositoryMock.findStoreById.mockResolvedValue({ id: 1, name: "Fresh Bakery" });
+
+            const cachedData = {
+                schemaVersion: "1.0.0",
+                storeId: "1",
+                version: 2,
+                meta: { name: "Fresh Bakery" },
+                theme: DEFAULT_STORE_CONFIG_CONTENT.theme,
+                pages: DEFAULT_STORE_CONFIG_CONTENT.pages,
+            };
+            redisMock.get.mockResolvedValue(cachedData);
+
+            const result = await service.getActiveConfig(1);
+
+            expect(result).toEqual(cachedData);
+            expect(repositoryMock.findActiveConfig).not.toHaveBeenCalled();
+        });
+
+        it("should save to cache on cache miss", async () => {
+            repositoryMock.findStoreById.mockResolvedValue({ id: 1, name: "Fresh Bakery" });
+            redisMock.get.mockResolvedValue(null);
+            repositoryMock.findActiveConfig.mockResolvedValue(null);
+
+            await service.getActiveConfig(1);
+
+            expect(redisMock.set).toHaveBeenCalledWith("store:config:1", expect.any(Object), 3600);
+        });
+
+        it("should invalidate cache on publish", async () => {
+            repositoryMock.findStoreById.mockResolvedValue({ id: 1, ownerUserId: 10, name: "Fresh Bakery" });
+            txMock.storeConfig.findFirst.mockResolvedValue({ version: 1 });
+            txMock.storeConfig.create.mockResolvedValue({
+                version: 2,
+                schemaVersion: "1.0.0",
+                contentJson: DEFAULT_STORE_CONFIG_CONTENT,
+            });
+
+            await service.publishConfig(1, 10, { contentJson: DEFAULT_STORE_CONFIG_CONTENT });
+
+            expect(redisMock.del).toHaveBeenCalledWith("store:config:1");
+        });
+    });
+
+    describe("Zod Schema Validation", () => {
+        it("should throw BadRequestException if schemaVersion is unsupported", async () => {
+            repositoryMock.findStoreById.mockResolvedValue({ id: 1, ownerUserId: 10 });
+
+            await expect(
+                service.publishConfig(1, 10, {
+                    schemaVersion: "99.0.0",
+                    contentJson: DEFAULT_STORE_CONFIG_CONTENT,
+                }),
+            ).rejects.toThrow(BadRequestException);
+        });
+
+        it("should throw BadRequestException if contentJson has an invalid section type", async () => {
+            repositoryMock.findStoreById.mockResolvedValue({ id: 1, ownerUserId: 10 });
+
+            const invalidContent = {
+                ...DEFAULT_STORE_CONFIG_CONTENT,
+                pages: [
+                    {
+                        id: "p1",
+                        slug: "/",
+                        title: "Home",
+                        sections: [{ id: "s1", type: "INVALID_WIDGET", props: {} }],
+                    },
+                ],
+            };
+
+            await expect(
+                service.publishConfig(1, 10, {
+                    contentJson: invalidContent as any,
+                }),
+            ).rejects.toThrow(BadRequestException);
+        });
+    });
+
 });
