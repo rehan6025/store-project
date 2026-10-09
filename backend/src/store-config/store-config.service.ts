@@ -1,4 +1,5 @@
 import {
+    BadRequestException,
     ForbiddenException,
     Injectable,
     NotFoundException,
@@ -12,10 +13,15 @@ import {
 } from "./store-config.types.js";
 import type { PublishConfigInput } from "./dto/publish-config.dto.js";
 import type { RollbackConfigInput } from "./dto/rollback-config.dto.js";
+import { RedisService } from "../redis/redis.service.js";
+import { SCHEMA_VALIDATORS } from "./store-config.validator.js";
 
 @Injectable()
 export class StoreConfigService {
-    constructor(private readonly repository: StoreConfigRepository) {}
+    constructor(
+        private readonly repository: StoreConfigRepository,
+        private readonly redis: RedisService
+    ) {}
 
     // Public: Fetch currently active store configuration by numeric store ID
     async getActiveConfig(storeId: number): Promise<StoreSchemaResponse> {
@@ -24,29 +30,24 @@ export class StoreConfigService {
             throw new NotFoundException("Store not found");
         }
 
+        const cached = await this.redis.get<StoreSchemaResponse>(this.getCacheKey(storeId))
+        if(cached) return cached
+
         const activeConfig = await this.repository.findActiveConfig(storeId);
 
-        // Fallback: If no config was ever seeded/published, serve the platform default template
-        if (!activeConfig) {
-            return {
-                schemaVersion: "1.0.0",
-                storeId: String(store.id),
-                version: 1,
-                meta: { name: store.name },
-                theme: DEFAULT_STORE_CONFIG_CONTENT.theme,
-                pages: DEFAULT_STORE_CONFIG_CONTENT.pages,
-            };
-        }
-
-        const content = activeConfig.contentJson as unknown as StoreConfigContent;
-        return {
-            schemaVersion: activeConfig.schemaVersion,
+        const content = activeConfig?.contentJson as unknown as StoreConfigContent;
+        const response: StoreSchemaResponse = {
+            schemaVersion: activeConfig?.schemaVersion ?? "1.0.0",
             storeId: String(store.id),
-            version: activeConfig.version,
+            version: activeConfig?.version ?? 1,
             meta: content?.meta ?? { name: store.name },
             theme: content?.theme ?? DEFAULT_STORE_CONFIG_CONTENT.theme,
             pages: content?.pages ?? DEFAULT_STORE_CONFIG_CONTENT.pages,
         };
+
+        await this.redis.set(this.getCacheKey(storeId), response, 3600);
+        return response;
+
     }
 
     // Public: Fetch currently active store configuration by store slug
@@ -86,7 +87,19 @@ export class StoreConfigService {
             throw new ForbiddenException("You are not the owner of this store");
         }
 
-        return await this.repository.client.$transaction(async (tx) => {
+        const validator = SCHEMA_VALIDATORS[input.schemaVersion ?? "1.0.0"]
+
+        if(!validator){
+            throw new BadRequestException("Unsupported schema version")
+        }
+
+        const parsed = validator.safeParse(input.contentJson)
+
+        if(!parsed.success){
+            throw new BadRequestException(parsed.error.flatten())
+        }
+
+        const response = await this.repository.client.$transaction(async (tx) => {
             const latest = await tx.storeConfig.findFirst({
                 where: { storeId },
                 orderBy: { version: "desc" },
@@ -126,6 +139,10 @@ export class StoreConfigService {
                 pages: content?.pages ?? DEFAULT_STORE_CONFIG_CONTENT.pages,
             };
         });
+
+        await this.redis.del(this.getCacheKey(storeId));
+
+        return response;
     }
 
     // Protected: Merchant rolls back to a previous revision (Forward-only restoration)
@@ -152,7 +169,7 @@ export class StoreConfigService {
             );
         }
 
-        return await this.repository.client.$transaction(async (tx) => {
+        const response = await this.repository.client.$transaction(async (tx) => {
             const latest = await tx.storeConfig.findFirst({
                 where: { storeId },
                 orderBy: { version: "desc" },
@@ -192,5 +209,15 @@ export class StoreConfigService {
                 pages: content?.pages ?? DEFAULT_STORE_CONFIG_CONTENT.pages,
             };
         });
+
+        await this.redis.del(this.getCacheKey(storeId));
+
+        return response;
     }
+
+
+    private getCacheKey(storeId: number): string {
+        return `store:config:${storeId}`;
+    }
+
 }
