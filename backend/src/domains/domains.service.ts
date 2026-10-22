@@ -66,16 +66,23 @@ export class DomainsService {
         }
         
         const redirect = await this.repository.findSlugRedirect(candidateSlug);
+
         if (redirect && redirect.store) {
-            const resolved: ResolvedStore = {
-                storeId: redirect.store.id,
-                storeSlug: redirect.store.slug,
-                storeName: redirect.store.name,
-                hostname,
-            };
-            await this.redis.set(this.getCacheKey(hostname), resolved, 3600); // 1-hr cache
-            return resolved;
+            const COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000; // 30 days / 1 month
+            const isUnderCooldown = Date.now() - redirect.createdAt.getTime() < COOLDOWN_MS;
+
+            if (isUnderCooldown) {
+                const resolved: ResolvedStore = {
+                    storeId: redirect.store.id,
+                    storeSlug: redirect.store.slug,
+                    storeName: redirect.store.name,
+                    hostname,
+                };
+                await this.redis.set(this.getCacheKey(hostname), resolved, 3600); // 1-hr cache
+                return resolved;
+            }
         }
+
 
 
         throw new NotFoundException(`No store found for domain: ${hostname}`);
