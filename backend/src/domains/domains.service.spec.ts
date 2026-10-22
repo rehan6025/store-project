@@ -114,6 +114,7 @@ describe("DomainsService", () => {
             repositoryMock.findStoreBySlug.mockResolvedValue(null);
             repositoryMock.findSlugRedirect.mockResolvedValue({
                 slug: "old-bakery",
+                createdAt: new Date(),
                 store: {
                     id: 1,
                     slug: "new-bakery",
@@ -133,6 +134,27 @@ describe("DomainsService", () => {
                 "domain:old-bakery.sellvia.com",
                 expect.any(Object),
                 3600,
+            );
+        });
+
+        it("should throw NotFoundException if historical slug redirect is expired (> 30 days)", async () => {
+            redisMock.get.mockResolvedValue(null);
+            repositoryMock.findDomainByHostname.mockResolvedValue(null);
+            repositoryMock.findStoreBySlug.mockResolvedValue(null);
+
+            const expiredDate = new Date(Date.now() - 35 * 24 * 60 * 60 * 1000); // 35 days ago
+            repositoryMock.findSlugRedirect.mockResolvedValue({
+                slug: "expired-bakery",
+                createdAt: expiredDate,
+                store: {
+                    id: 1,
+                    slug: "new-bakery",
+                    name: "New Bakery",
+                },
+            });
+
+            await expect(service.resolveHostname("expired-bakery.sellvia.com")).rejects.toThrow(
+                NotFoundException,
             );
         });
 
