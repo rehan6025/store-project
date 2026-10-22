@@ -3,6 +3,23 @@ export interface NavItem {
   href: string;
 }
 
+export interface HeroHighlight {
+  value: string;
+  label: string;
+}
+
+export interface HeroImage {
+  src: string;
+  alt: string;
+}
+
+export interface HeroSection {
+  title: string;
+  titleHighlight: string;
+  cta: NavItem;
+  images: HeroImage[];
+}
+
 export interface FooterColumn {
   title: string;
   links: NavItem[];
@@ -17,6 +34,8 @@ export interface FooterSection {
 export interface SiteConfig {
   name: string;
   description: string;
+  about: string;
+  hero: HeroSection;
   navigation: NavItem[];
   footerSection: FooterSection;
 }
@@ -24,6 +43,15 @@ export interface SiteConfig {
 export const siteConfig: SiteConfig = {
   name: "Sellvia",
   description: "A store-front builder",
+  about:
+    "Launch your ecommerce store in minutes, not weeks. With Sellvia's simple drag-and-drop builder, you can create a polished storefront that grows with your business.",
+
+  hero: {
+    title: "Selling online made simple with",
+    titleHighlight: "Sellvia",
+    cta: { label: "Get Started", href: "/signup" },
+    images: [{ src: "/", alt: "" }],
+  },
 
   navigation: [
     { label: "Features", href: "/features" },
