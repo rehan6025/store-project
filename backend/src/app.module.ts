@@ -11,6 +11,7 @@ import { PaymentsModule } from './payments/payments.module.js';
 import { StoreConfigModule } from './store-config/store-config.module.js';
 import { RedisModule } from "./redis/redis.module.js";
 import { DomainsModule } from "./domains/domains.module.js";
+import { AuthModule } from "./auth/auth.module.js";
 
 @Module({
     imports: [
@@ -25,7 +26,8 @@ import { DomainsModule } from "./domains/domains.module.js";
         OrdersModule,
         PaymentsModule,
         StoreConfigModule,
-        DomainsModule
+        DomainsModule,
+        AuthModule
     ],
 })
 export class AppModule {}
