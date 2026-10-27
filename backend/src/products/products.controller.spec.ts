@@ -1,6 +1,7 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { ProductsController } from "./products.controller.js";
 import { ProductsService } from "./products.service.js";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
 
 describe("ProductsController", () => {
     let controller: ProductsController;
@@ -18,7 +19,10 @@ describe("ProductsController", () => {
                     useValue: productsServiceMock,
                 },
             ],
-        }).compile();
+        })
+            .overrideGuard(JwtAuthGuard)
+            .useValue({ canActivate: () => true })
+            .compile();
 
         controller = module.get<ProductsController>(ProductsController);
 
