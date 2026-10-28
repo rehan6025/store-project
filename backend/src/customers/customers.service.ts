@@ -46,24 +46,20 @@ export class CustomersService {
         return customer;
     }
 
-    // --- Decision-Heavy / Multi-Tenancy Methods Below ---
 
     async registerCustomer(storeId: number, input: RegisterCustomerInput) {
-        // 1. Verify store exists (404 if not)
         const store = await this.customersRepository.getStore(storeId);
         if(!store){
             throw new NotFoundException("Store not found.")
         }
-        // 2. Normalize email (trim, lowercase)
         const normalizedEmail = input.email.trim().toLowerCase()
-        // 3. Check scoped uniqueness (is email already taken within THIS store?)
+       
         const existingCustomer = await this.customersRepository.findCustomerByEmail(storeId,normalizedEmail)
 
         if(existingCustomer){
             throw new BadRequestException("Email already exists in this store")
         }
-        //    (Remember: Alice can exist in Store 1 and Store 2, but not twice in Store 1)
-        // 4. Create customer via repository
+        
         if(input.password){
             input.password = await argon2.hash(input.password,{
                 type: argon2.argon2id,
@@ -88,18 +84,16 @@ export class CustomersService {
     }
 
     async updateCustomer(storeId: number, customerId: number, input: UpdateCustomerInput) {
-        // TODO: Challenge 2 for user:
-        // 1. Verify store exists (404)
         const store = await this.customersRepository.getStore(storeId)
         if(!store ){
             throw new NotFoundException("Store not found")
         }
-        // 2. Verify customer exists under this storeId (404)
+
         const existingCustomer = await this.customersRepository.findCustomerById(storeId, customerId)
         if(!existingCustomer){
             throw new NotFoundException("Customer not found")
         }
-        // 3. If email changed: normalize and check if another customer in this store already uses it (400)
+        
         if(input.email){
             const normalizedEmail = input.email.trim().toLowerCase()
             const existingCustomer = await this.customersRepository.findCustomerByEmail(storeId,normalizedEmail)
@@ -107,7 +101,7 @@ export class CustomersService {
                 throw new BadRequestException("Email already exists in this store")
             }
         }
-        // 4. Update via repository
+        
         if(input.email){
             input.email = input.email.trim().toLowerCase()
         }

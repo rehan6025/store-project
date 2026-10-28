@@ -1,5 +1,8 @@
-import { Body, Controller, Delete, Get, Headers, Param, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { CategoriesService, type CreateCategoryInput, type UpdateCategoryInput } from "./categories.service.js";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
+import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
+import type { JwtPayload } from "../auth/auth.types.js";
 
 @Controller("stores/:storeId/categories")
 export class CategoriesController {
@@ -21,25 +24,27 @@ export class CategoriesController {
     }
 
     // Owner only: create category
+    @UseGuards(JwtAuthGuard)
     @Post()
     createCategory(
         @Param("storeId") storeId: string,
-        @Headers("x-user-id") userId: string,
+        @CurrentUser() user: JwtPayload,
         @Body() body: CreateCategoryInput,
     ) {
-        const currentUserId = userId ? Number(userId) : 1;
+        const currentUserId = user ? Number(user.sub) : 1;
         return this.categoriesService.createCategory(Number(storeId), currentUserId, body);
     }
 
     // Owner only: update category
+    @UseGuards(JwtAuthGuard)
     @Patch(":categoryId")
     updateCategory(
         @Param("storeId") storeId: string,
         @Param("categoryId") categoryId: string,
-        @Headers("x-user-id") userId: string,
+        @CurrentUser() user: JwtPayload,
         @Body() body: UpdateCategoryInput,
     ) {
-        const currentUserId = userId ? Number(userId) : 1;
+        const currentUserId = user ? Number(user.sub) : 1;
         return this.categoriesService.updateCategory(
             Number(storeId),
             currentUserId,
@@ -49,13 +54,14 @@ export class CategoriesController {
     }
 
     // Owner only: delete category
+    @UseGuards(JwtAuthGuard)
     @Delete(":categoryId")
     deleteCategory(
         @Param("storeId") storeId: string,
         @Param("categoryId") categoryId: string,
-        @Headers("x-user-id") userId: string,
+        @CurrentUser() user: JwtPayload,
     ) {
-        const currentUserId = userId ? Number(userId) : 1;
+        const currentUserId = user ? Number(user.sub) : 1;
         return this.categoriesService.deleteCategory(
             Number(storeId),
             currentUserId,
