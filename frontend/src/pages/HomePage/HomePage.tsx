@@ -1,5 +1,5 @@
 import { Navbar, Footer } from "@/components/layouts";
-import { Demo, Features, Hero } from "@/pages/HomePage/sections";
+import { Demo, Features, Hero, LaunchFlow } from "@/pages/HomePage/sections";
 
 const HomePage = () => {
   return (
@@ -9,6 +9,7 @@ const HomePage = () => {
         <Hero />
         <Demo />
         <Features />
+        <LaunchFlow />
       </main>
       <Footer />
     </>
