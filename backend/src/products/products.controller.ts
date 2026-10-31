@@ -1,6 +1,9 @@
-import { Body, Controller, Get, Headers, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { ProductsService, type CreateProductInput } from "./products.service.js";
 import { ProductStatus } from "../../generated/prisma/enums.js";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
+import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
+import type { JwtPayload } from "../auth/auth.types.js";
 
 @Controller("stores/:storeId/products")
 export class ProductsController {
@@ -31,24 +34,26 @@ export class ProductsController {
     }
 
     // Create a product with initial inventory
+    @UseGuards(JwtAuthGuard)
     @Post()
     createProduct(
         @Param("storeId") storeId: string,
-        @Headers("x-user-id") userId: string,
+        @CurrentUser() user: JwtPayload,
         @Body() body: CreateProductInput,
     ) {
-        const currentUserId = userId ? Number(userId) : 1;
+        const currentUserId = user ? Number(user.sub) : 1;
         return this.productsService.createProduct(Number(storeId), currentUserId, body);
     }
 
     // Soft delete / archive a product
+    @UseGuards(JwtAuthGuard)
     @Patch(":productId/archive")
     archiveProduct(
         @Param("storeId") storeId: string,
         @Param("productId") productId: string,
-        @Headers("x-user-id") userId: string,
+        @CurrentUser() user: JwtPayload
     ) {
-        const currentUserId = userId ? Number(userId) : 1;
+        const currentUserId = user ? Number(user.sub) : 1;
         return this.productsService.archiveProduct(Number(storeId), currentUserId, Number(productId));
     }
 }

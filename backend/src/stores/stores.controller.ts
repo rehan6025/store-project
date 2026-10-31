@@ -2,15 +2,18 @@ import {
     Body,
     Controller,
     Get,
-    Headers,
     Param,
     Patch,
     Post,
     Query,
     Res,
+    UseGuards,
 } from "@nestjs/common";
 import type { Response } from "express";
 import { StoreService } from "./stores.service.js";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
+import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
+import type { JwtPayload } from "../auth/auth.types.js";
 
 @Controller("stores")
 export class StoresController {
@@ -40,22 +43,24 @@ export class StoresController {
         return res.redirect(301,`/stores/slug/${result.redirectToSlug}`)
     }
 
+    @UseGuards(JwtAuthGuard)
     @Post()
     createStore(
-        @Headers("x-user-id") userId: string,
+        @CurrentUser() user: JwtPayload,
         @Body() body: { name: string; slug: string; allowsDelivery?: boolean; allowsPickup?: boolean },
     ) {
-        const currentUserId = userId ? Number(userId) : 1;
+        const currentUserId = user.sub ? Number(user.sub) : 1;
         return this.storeService.createStore(currentUserId, body);
     }
 
+    @UseGuards(JwtAuthGuard)
     @Patch(":id")
     updateStore(
         @Param("id") id: string,
-        @Headers("x-user-id") userId: string,
+        @CurrentUser() user: JwtPayload,
         @Body() body: { name?: string; slug?: string; allowsDelivery?: boolean; allowsPickup?: boolean },
     ) {
-        const currentUserId = userId ? Number(userId) : 1;
+        const currentUserId = user.sub ? Number(user.sub) : 1;
         return this.storeService.updateStore(Number(id), currentUserId, body);
     }
 }

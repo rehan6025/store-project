@@ -1,19 +1,23 @@
-import { Body, Controller, Get, Headers, Param, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { OrdersService, type CheckoutInput } from "./orders.service.js";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
+import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
+import type { JwtPayload } from "../auth/auth.types.js";
 
 @Controller("stores/:storeId/orders")
 export class OrdersController {
     constructor(private readonly ordersService: OrdersService) {}
 
     // Merchant view: list all orders for this store
+    @UseGuards(JwtAuthGuard)
     @Get()
     getStoreOrders(
         @Param("storeId") storeId: string,
-        @Headers("x-user-id") userId: string,
+        @CurrentUser() user: JwtPayload,
         @Query("limit") limit?: string,
         @Query("offset") offset?: string,
     ) {
-        const currentUserId = userId ? Number(userId) : 1;
+        const currentUserId = user ? Number(user.sub) : 1;
         return this.ordersService.getStoreOrders(
             Number(storeId),
             currentUserId,
