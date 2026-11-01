@@ -15,6 +15,7 @@ describe("StoreConfigService", () => {
             findFirst: vi.fn(),
             updateMany: vi.fn(),
             create: vi.fn(),
+            deleteMany: vi.fn(),
         },
     };
 
@@ -25,6 +26,10 @@ describe("StoreConfigService", () => {
         findLatestVersion: vi.fn(),
         findConfigByVersion: vi.fn(),
         findConfigHistory: vi.fn(),
+        findDraftConfig: vi.fn(),
+        createDraftConfig: vi.fn(),
+        updateDraftConfig: vi.fn(),
+        deleteDraftConfigs: vi.fn(),
         client: {
             $transaction: vi.fn(async (cb) => await cb(txMock)),
         },
@@ -315,6 +320,109 @@ describe("StoreConfigService", () => {
                     contentJson: invalidContent as any,
                 }),
             ).rejects.toThrow(BadRequestException);
+        });
+    });
+
+    describe("saveDraft", () => {
+        it("should throw NotFoundException if store does not exist", async () => {
+            repositoryMock.findStoreById.mockResolvedValue(null);
+
+            await expect(
+                service.saveDraft(999, 10, { contentJson: DEFAULT_STORE_CONFIG_CONTENT }),
+            ).rejects.toThrow(NotFoundException);
+        });
+
+        it("should throw ForbiddenException if user does not own store", async () => {
+            repositoryMock.findStoreById.mockResolvedValue({ id: 1, ownerUserId: 10 });
+
+            await expect(
+                service.saveDraft(1, 999, { contentJson: DEFAULT_STORE_CONFIG_CONTENT }),
+            ).rejects.toThrow(ForbiddenException);
+        });
+
+        it("should create new draft when none exists and NOT bust Redis cache", async () => {
+            repositoryMock.findStoreById.mockResolvedValue({ id: 1, name: "Bakery", ownerUserId: 10 });
+            repositoryMock.findDraftConfig.mockResolvedValue(null);
+            repositoryMock.findLatestVersion.mockResolvedValue({ version: 2 });
+            repositoryMock.createDraftConfig.mockResolvedValue({
+                id: 50,
+                storeId: 1,
+                version: 3,
+                schemaVersion: "1.0.0",
+                contentJson: DEFAULT_STORE_CONFIG_CONTENT,
+                status: StoreConfigStatus.DRAFT,
+            });
+
+            const res = await service.saveDraft(1, 10, { contentJson: DEFAULT_STORE_CONFIG_CONTENT });
+
+            expect(repositoryMock.createDraftConfig).toHaveBeenCalledWith(
+                1,
+                3,
+                "1.0.0",
+                DEFAULT_STORE_CONFIG_CONTENT,
+            );
+            expect(res.status).toBe(StoreConfigStatus.DRAFT);
+            expect(redisMock.del).not.toHaveBeenCalled();
+        });
+
+        it("should update existing draft in place and NOT bust Redis cache", async () => {
+            repositoryMock.findStoreById.mockResolvedValue({ id: 1, name: "Bakery", ownerUserId: 10 });
+            repositoryMock.findDraftConfig.mockResolvedValue({ id: 50, version: 3 });
+            repositoryMock.updateDraftConfig.mockResolvedValue({
+                id: 50,
+                storeId: 1,
+                version: 3,
+                schemaVersion: "1.0.0",
+                contentJson: DEFAULT_STORE_CONFIG_CONTENT,
+                status: StoreConfigStatus.DRAFT,
+            });
+
+            const res = await service.saveDraft(1, 10, { contentJson: DEFAULT_STORE_CONFIG_CONTENT });
+
+            expect(repositoryMock.updateDraftConfig).toHaveBeenCalledWith(
+                50,
+                "1.0.0",
+                DEFAULT_STORE_CONFIG_CONTENT,
+            );
+            expect(res.status).toBe(StoreConfigStatus.DRAFT);
+            expect(redisMock.del).not.toHaveBeenCalled();
+        });
+    });
+
+    describe("getDraftConfig", () => {
+        it("should return draft with isDraft: true when present", async () => {
+            repositoryMock.findStoreById.mockResolvedValue({ id: 1, name: "Bakery", ownerUserId: 10 });
+            repositoryMock.findDraftConfig.mockResolvedValue({
+                id: 50,
+                storeId: 1,
+                version: 3,
+                schemaVersion: "1.0.0",
+                contentJson: DEFAULT_STORE_CONFIG_CONTENT,
+                status: StoreConfigStatus.DRAFT,
+            });
+
+            const res = await service.getDraftConfig(1, 10);
+
+            expect(res.isDraft).toBe(true);
+            expect(res.version).toBe(3);
+        });
+
+        it("should fallback to active config with isDraft: false when no draft exists", async () => {
+            repositoryMock.findStoreById.mockResolvedValue({ id: 1, name: "Bakery", ownerUserId: 10 });
+            repositoryMock.findDraftConfig.mockResolvedValue(null);
+            repositoryMock.findActiveConfig.mockResolvedValue({
+                id: 10,
+                storeId: 1,
+                version: 1,
+                schemaVersion: "1.0.0",
+                contentJson: DEFAULT_STORE_CONFIG_CONTENT,
+                status: StoreConfigStatus.ACTIVE,
+            });
+
+            const res = await service.getDraftConfig(1, 10);
+
+            expect(res.isDraft).toBe(false);
+            expect(res.version).toBe(1);
         });
     });
 

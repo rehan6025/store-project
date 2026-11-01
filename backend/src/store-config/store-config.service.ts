@@ -13,6 +13,7 @@ import {
 } from "./store-config.types.js";
 import type { PublishConfigInput } from "./dto/publish-config.dto.js";
 import type { RollbackConfigInput } from "./dto/rollback-config.dto.js";
+import type { SaveDraftInput } from "./dto/save-draft.dto.js";
 import { RedisService } from "../redis/redis.service.js";
 import { SCHEMA_VALIDATORS } from "./store-config.validator.js";
 
@@ -21,7 +22,7 @@ export class StoreConfigService {
     constructor(
         private readonly repository: StoreConfigRepository,
         private readonly redis: RedisService
-    ) {}
+    ) { }
 
     // Public: Fetch currently active store configuration by numeric store ID
     async getActiveConfig(storeId: number): Promise<StoreSchemaResponse> {
@@ -31,7 +32,7 @@ export class StoreConfigService {
         }
 
         const cached = await this.redis.get<StoreSchemaResponse>(this.getCacheKey(storeId))
-        if(cached) return cached
+        if (cached) return cached
 
         const activeConfig = await this.repository.findActiveConfig(storeId);
 
@@ -89,13 +90,13 @@ export class StoreConfigService {
 
         const validator = SCHEMA_VALIDATORS[input.schemaVersion ?? "1.0.0"]
 
-        if(!validator){
+        if (!validator) {
             throw new BadRequestException("Unsupported schema version")
         }
 
         const parsed = validator.safeParse(input.contentJson)
 
-        if(!parsed.success){
+        if (!parsed.success) {
             throw new BadRequestException(parsed.error.flatten())
         }
 
@@ -126,6 +127,14 @@ export class StoreConfigService {
                     schemaVersion: input.schemaVersion ?? "1.0.0",
                     contentJson: input.contentJson as any,
                     status: StoreConfigStatus.ACTIVE,
+                },
+            });
+
+            // Clean up working draft once published
+            await tx.storeConfig.deleteMany({
+                where: {
+                    storeId,
+                    status: StoreConfigStatus.DRAFT,
                 },
             });
 
@@ -220,4 +229,78 @@ export class StoreConfigService {
         return `store:config:${storeId}`;
     }
 
+    // Protected: Merchant saves working draft (Lenient validation, no Redis cache bust)
+    async saveDraft(storeId: number, userId: number, input: SaveDraftInput) {
+        const store = await this.repository.findStoreById(storeId);
+        if (!store) {
+            throw new NotFoundException("Store not found");
+        }
+        if (store.ownerUserId !== userId) {
+            throw new ForbiddenException("You are not the owner of this store");
+        }
+
+        const existingDraft = await this.repository.findDraftConfig(storeId);
+
+        const schemaVersion = input.schemaVersion ?? "1.0.0";
+        let draft;
+        if (existingDraft) {
+            draft = await this.repository.updateDraftConfig(
+                existingDraft.id,
+                schemaVersion,
+                input.contentJson,
+            );
+        } else {
+            const nextVersion =
+                ((await this.repository.findLatestVersion(storeId))?.version ?? 0) + 1;
+            draft = await this.repository.createDraftConfig(
+                storeId,
+                nextVersion,
+                schemaVersion,
+                input.contentJson,
+            );
+        }
+
+        const content = draft.contentJson as unknown as StoreConfigContent;
+        return {
+            schemaVersion: draft.schemaVersion,
+            storeId: String(store.id),
+            version: draft.version,
+            status: draft.status,
+            meta: content?.meta ?? { name: store.name },
+            theme: content?.theme ?? DEFAULT_STORE_CONFIG_CONTENT.theme,
+            pages: content?.pages ?? DEFAULT_STORE_CONFIG_CONTENT.pages,
+        };
+    }
+
+    // Protected: Merchant fetches working draft for the builder (falls back to ACTIVE config if no draft)
+    async getDraftConfig(storeId: number, userId: number) {
+        const store = await this.repository.findStoreById(storeId);
+        if (!store) {
+            throw new NotFoundException("Store not found");
+        }
+        if (store.ownerUserId !== userId) {
+            throw new ForbiddenException("You are not the owner of this store");
+        }
+
+        const draft = await this.repository.findDraftConfig(storeId);
+        if (draft) {
+            const content = draft.contentJson as unknown as StoreConfigContent;
+            return {
+                schemaVersion: draft.schemaVersion,
+                storeId: String(store.id),
+                version: draft.version,
+                isDraft: true,
+                meta: content?.meta ?? { name: store.name },
+                theme: content?.theme ?? DEFAULT_STORE_CONFIG_CONTENT.theme,
+                pages: content?.pages ?? DEFAULT_STORE_CONFIG_CONTENT.pages,
+            };
+        }
+
+        // Fallback: If no draft exists yet, return active config as editor baseline
+        const active = await this.getActiveConfig(storeId);
+        return {
+            ...active,
+            isDraft: false,
+        };
+    }
 }
