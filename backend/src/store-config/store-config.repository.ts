@@ -5,7 +5,7 @@ import type { StoreConfigContent } from "./store-config.types.js";
 
 @Injectable()
 export class StoreConfigRepository {
-    constructor(private readonly prisma: PrismaService) {}
+    constructor(private readonly prisma: PrismaService) { }
 
     get client() {
         return this.prisma;
@@ -74,6 +74,56 @@ export class StoreConfigRepository {
                 schemaVersion: "1.0.0",
                 contentJson: content as any,
                 status: StoreConfigStatus.ACTIVE,
+            },
+        });
+    }
+
+    async findDraftConfig(storeId: number) {
+        return await this.prisma.storeConfig.findFirst({
+            where: {
+                storeId,
+                status: StoreConfigStatus.DRAFT,
+            },
+        });
+    }
+
+    async createDraftConfig(
+        storeId: number,
+        version: number,
+        schemaVersion: string,
+        contentJson: any,
+    ) {
+        return await this.prisma.storeConfig.create({
+            data: {
+                storeId,
+                version,
+                schemaVersion,
+                contentJson,
+                status: StoreConfigStatus.DRAFT,
+            },
+        });
+    }
+
+    async updateDraftConfig(
+        id: number,
+        schemaVersion: string,
+        contentJson: any,
+    ) {
+        return await this.prisma.storeConfig.update({
+            where: { id },
+            data: {
+                schemaVersion,
+                contentJson,
+                updatedAt: new Date(),
+            },
+        });
+    }
+
+    async deleteDraftConfigs(storeId: number) {
+        return await this.prisma.storeConfig.deleteMany({
+            where: {
+                storeId,
+                status: StoreConfigStatus.DRAFT,
             },
         });
     }

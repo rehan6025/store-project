@@ -73,6 +73,7 @@ model StoreConfig {
 enum StoreConfigStatus {
   ACTIVE
   BACKUP
+  DRAFT
 }
 
 model Domain {

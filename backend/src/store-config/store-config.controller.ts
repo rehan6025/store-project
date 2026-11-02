@@ -9,6 +9,7 @@ import {
 import { StoreConfigService } from "./store-config.service.js";
 import type { PublishConfigInput } from "./dto/publish-config.dto.js";
 import type { RollbackConfigInput } from "./dto/rollback-config.dto.js";
+import type { SaveDraftInput } from "./dto/save-draft.dto.js";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import type { JwtPayload } from "../auth/auth.types.js";
@@ -66,6 +67,33 @@ export class StoreConfigController {
     ) {
         const currentUserId = user ? Number(user.sub) : 1;
         return this.storeConfigService.rollbackConfig(
+            Number(storeId),
+            currentUserId,
+            body,
+        );
+    }
+
+    // Protected: Merchant fetches working draft for the builder (or active fallback)
+    @UseGuards(JwtAuthGuard)
+    @Get("stores/:storeId/config/draft")
+    getDraftConfig(
+        @Param("storeId") storeId: string,
+        @CurrentUser() user: JwtPayload,
+    ) {
+        const currentUserId = user ? Number(user.sub) : 1;
+        return this.storeConfigService.getDraftConfig(Number(storeId), currentUserId);
+    }
+
+    // Protected: Merchant saves working draft
+    @UseGuards(JwtAuthGuard)
+    @Post("stores/:storeId/config/draft")
+    saveDraft(
+        @Param("storeId") storeId: string,
+        @CurrentUser() user: JwtPayload,
+        @Body() body: SaveDraftInput,
+    ) {
+        const currentUserId = user ? Number(user.sub) : 1;
+        return this.storeConfigService.saveDraft(
             Number(storeId),
             currentUserId,
             body,
