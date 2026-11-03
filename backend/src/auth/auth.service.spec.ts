@@ -8,7 +8,7 @@ import {
     ConflictException,
     UnauthorizedException,
 } from "@nestjs/common";
-import argon2 from "argon2";
+import { hash } from "@node-rs/argon2";
 
 const PEPPER = Buffer.from(process.env.PASSWORD_PEPPER || "", "utf-8");
 
@@ -100,10 +100,9 @@ describe("AuthService", () => {
 
     describe("login",()=>{
         it("should login successfully and return a valid JWT",async () => {
-            const passwordHash = await argon2.hash("mypassword123",{
-                type: argon2.argon2id,
-                secret:PEPPER
-            })
+            const passwordHash = await hash("mypassword123", {
+                secret: PEPPER,
+            });
 
             repositoryMock.findUserByEmail.mockResolvedValue({
                 id: "user-1",
@@ -134,8 +133,7 @@ describe("AuthService", () => {
         });
 
         it("should throw UnauthorizedException if password does not match", async () => {
-            const passwordHash = await argon2.hash("correctPassword123", {
-                type: argon2.argon2id,
+            const passwordHash = await hash("correctPassword123", {
                 secret: PEPPER,
             });
 

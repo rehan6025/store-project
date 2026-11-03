@@ -1,22 +1,35 @@
-import { Body, Controller, Get, Headers, Param, Post } from "@nestjs/common";
+import {
+    Body,
+    Controller,
+    Get,
+    Param,
+    Post,
+    Req,
+    UseGuards,
+} from "@nestjs/common";
+import type { Request } from "express";
 import { PaymentsService } from "./payments.service.js";
 import type { ProcessPaymentInput } from "./dto/process-payment.dto.js";
+import { CustomerAuthGuard } from "../customers/guards/customer-auth.guard.js";
+import { CurrentCustomer } from "../customers/decorators/current-customer.decorator.js";
+import type { CustomerJwtPayload } from "../customers/customers.types.js";
+import type { JwtPayload } from "../auth/auth.types.js";
 
 @Controller("stores/:storeId")
 export class PaymentsController {
     constructor(private readonly paymentsService: PaymentsService) {}
 
     // Shopper submits a payment for their pending order
+    @UseGuards(CustomerAuthGuard)
     @Post("payments")
     processPayment(
         @Param("storeId") storeId: string,
-        @Headers("x-customer-id") customerId: string,
+        @CurrentCustomer() customer: CustomerJwtPayload,
         @Body() body: ProcessPaymentInput,
     ) {
-        const currentCustomerId = customerId ? Number(customerId) : 1;
         return this.paymentsService.processPayment(
             Number(storeId),
-            currentCustomerId,
+            customer.sub,
             body,
         );
     }
@@ -26,33 +39,31 @@ export class PaymentsController {
     getPaymentById(
         @Param("storeId") storeId: string,
         @Param("paymentId") paymentId: string,
-        @Headers("x-customer-id") customerId?: string,
-        @Headers("x-user-id") userId?: string,
+        @Req() req: Request & { user?: JwtPayload; customer?: CustomerJwtPayload },
     ) {
         return this.paymentsService.getPaymentById(
             Number(storeId),
             Number(paymentId),
             {
-                customerId: customerId ? Number(customerId) : undefined,
-                userId: userId ? Number(userId) : undefined,
+                customerId: req.customer ? req.customer.sub : undefined,
+                userId: req.user ? Number(req.user.sub) : undefined,
             },
         );
     }
 
-    // Inspect all payment attempts for a given order
+    // Inspect all payment attempts for a given order (shopper retries / history)
     @Get("orders/:orderId/payments")
     getOrderPayments(
         @Param("storeId") storeId: string,
         @Param("orderId") orderId: string,
-        @Headers("x-customer-id") customerId?: string,
-        @Headers("x-user-id") userId?: string,
+        @Req() req: Request & { user?: JwtPayload; customer?: CustomerJwtPayload },
     ) {
         return this.paymentsService.getOrderPayments(
             Number(storeId),
             Number(orderId),
             {
-                customerId: customerId ? Number(customerId) : undefined,
-                userId: userId ? Number(userId) : undefined,
+                customerId: req.customer ? req.customer.sub : undefined,
+                userId: req.user ? Number(req.user.sub) : undefined,
             },
         );
     }

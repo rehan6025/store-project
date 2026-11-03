@@ -1,8 +1,21 @@
-import { Body, Controller, Get, Headers, Param, Post, Query, UseGuards } from "@nestjs/common";
+import {
+    Body,
+    Controller,
+    Get,
+    Param,
+    Post,
+    Query,
+    Req,
+    UseGuards,
+} from "@nestjs/common";
+import type { Request } from "express";
 import { OrdersService, type CheckoutInput } from "./orders.service.js";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
+import { CustomerAuthGuard } from "../customers/guards/customer-auth.guard.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
+import { CurrentCustomer } from "../customers/decorators/current-customer.decorator.js";
 import type { JwtPayload } from "../auth/auth.types.js";
+import type { CustomerJwtPayload } from "../customers/customers.types.js";
 
 @Controller("stores/:storeId/orders")
 export class OrdersController {
@@ -27,20 +40,31 @@ export class OrdersController {
     }
 
     // Customer view: list their own past orders
+    @UseGuards(CustomerAuthGuard)
     @Get("my-orders")
     getMyOrders(
         @Param("storeId") storeId: string,
-        @Headers("x-customer-id") customerId: string,
+        @CurrentCustomer() customer: CustomerJwtPayload,
         @Query("limit") limit?: string,
         @Query("offset") offset?: string,
     ) {
-        const currentCustomerId = customerId ? Number(customerId) : 1;
         return this.ordersService.getCustomerOrders(
             Number(storeId),
-            currentCustomerId,
+            customer.sub,
             limit ? Number(limit) : 20,
             offset ? Number(offset) : 0,
         );
+    }
+
+    // Customer checkout: converts active cart into a pending order
+    @UseGuards(CustomerAuthGuard)
+    @Post("checkout")
+    checkout(
+        @Param("storeId") storeId: string,
+        @CurrentCustomer() customer: CustomerJwtPayload,
+        @Body() body: CheckoutInput,
+    ) {
+        return this.ordersService.checkout(Number(storeId), customer.sub, body);
     }
 
     // Get single order details
@@ -48,23 +72,11 @@ export class OrdersController {
     getOrderById(
         @Param("storeId") storeId: string,
         @Param("orderId") orderId: string,
-        @Headers("x-customer-id") customerId?: string,
-        @Headers("x-user-id") userId?: string,
+        @Req() req: Request & { user?: JwtPayload; customer?: CustomerJwtPayload },
     ) {
         return this.ordersService.getOrderById(Number(storeId), Number(orderId), {
-            customerId: customerId ? Number(customerId) : undefined,
-            userId: userId ? Number(userId) : undefined,
+            customerId: req.customer ? req.customer.sub : undefined,
+            userId: req.user ? Number(req.user.sub) : undefined,
         });
-    }
-
-    // Customer checkout: converts active cart into a pending order
-    @Post("checkout")
-    checkout(
-        @Param("storeId") storeId: string,
-        @Headers("x-customer-id") customerId: string,
-        @Body() body: CheckoutInput,
-    ) {
-        const currentCustomerId = customerId ? Number(customerId) : 1;
-        return this.ordersService.checkout(Number(storeId), currentCustomerId, body);
     }
 }
