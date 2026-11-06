@@ -2,6 +2,7 @@ import {
     Body,
     Controller,
     Get,
+    Headers,
     Param,
     Post,
     Req,
@@ -10,6 +11,7 @@ import {
 import type { Request } from "express";
 import { PaymentsService } from "./payments.service.js";
 import type { ProcessPaymentInput } from "./dto/process-payment.dto.js";
+import type { PaymentWebhookInput } from "./dto/payment-webhook.dto.js";
 import { CustomerAuthGuard } from "../customers/guards/customer-auth.guard.js";
 import { CurrentCustomer } from "../customers/decorators/current-customer.decorator.js";
 import type { CustomerJwtPayload } from "../customers/customers.types.js";
@@ -65,6 +67,22 @@ export class PaymentsController {
                 customerId: req.customer ? req.customer.sub : undefined,
                 userId: req.user ? Number(req.user.sub) : undefined,
             },
+        );
+    }
+
+    // Public: Asynchronous Webhook callback called by payment providers
+    @Post("payments/webhook/:provider")
+    handleWebhook(
+        @Param("storeId") storeId: string,
+        @Param("provider") provider: string,
+        @Headers("x-webhook-signature") signature: string,
+        @Body() body: PaymentWebhookInput,
+    ) {
+        return this.paymentsService.handleWebhook(
+            Number(storeId),
+            provider,
+            signature,
+            body,
         );
     }
 }

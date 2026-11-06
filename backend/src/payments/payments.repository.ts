@@ -4,7 +4,7 @@ import { PaymentStatus, OrderStatus } from "../../generated/prisma/enums.js";
 
 @Injectable()
 export class PaymentsRepository {
-    constructor(private readonly prisma: PrismaService) {}
+    constructor(private readonly prisma: PrismaService) { }
 
     // Expose prisma client for transactions
     get client() {
@@ -19,6 +19,7 @@ export class PaymentsRepository {
             },
             include: {
                 payments: true,
+                orderItems: true
             },
         });
     }
