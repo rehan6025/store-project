@@ -6,7 +6,7 @@ import {
     UnauthorizedException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
-import argon2 from "argon2";
+import { hash, verify } from "@node-rs/argon2";
 import { AuthRepository } from "./auth.repository.js";
 import type {
     AuthResponse,
@@ -37,8 +37,7 @@ export class AuthService {
             throw new ConflictException("User with this email already exists");
         }
 
-        const passwordHash = await argon2.hash(input.password, {
-            type: argon2.argon2id,
+        const passwordHash = await hash(input.password, {
             secret: PEPPER,
         });
 
@@ -73,7 +72,7 @@ export class AuthService {
             throw new UnauthorizedException("Invalid email or password");
         }
 
-        const isPasswordValid = await argon2.verify(
+        const isPasswordValid = await verify(
             user.passwordHash,
             input.password,
             { secret: PEPPER },
