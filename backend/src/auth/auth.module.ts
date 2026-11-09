@@ -5,6 +5,7 @@ import { AuthService } from "./auth.service.js";
 import { AuthRepository } from "./auth.repository.js";
 import { AuthController } from "./auth.controller.js";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard.js";
+import { CustomerAuthGuard } from "../customers/guards/customer-auth.guard.js";
 
 @Global()
 @Module({
@@ -15,7 +16,7 @@ import { JwtAuthGuard } from "./guards/jwt-auth.guard.js";
         }),
     ],
     controllers: [AuthController],
-    providers: [AuthService, AuthRepository, JwtAuthGuard],
-    exports: [AuthService, JwtModule, JwtAuthGuard],
+    providers: [AuthService, AuthRepository, JwtAuthGuard, CustomerAuthGuard],
+    exports: [AuthService, JwtModule, JwtAuthGuard, CustomerAuthGuard],
 })
 export class AuthModule {}

@@ -1,6 +1,19 @@
-import { Body, Controller, Delete, Get, Headers, Param, Patch, Post } from "@nestjs/common";
+import {
+    Body,
+    Controller,
+    Delete,
+    Get,
+    Param,
+    Patch,
+    Post,
+    UseGuards,
+} from "@nestjs/common";
 import { CartsService, type AddCartItemInput, type UpdateCartItemInput } from "./carts.service.js";
+import { CustomerAuthGuard } from "../customers/guards/customer-auth.guard.js";
+import { CurrentCustomer } from "../customers/decorators/current-customer.decorator.js";
+import type { CustomerJwtPayload } from "../customers/customers.types.js";
 
+@UseGuards(CustomerAuthGuard)
 @Controller("stores/:storeId/cart")
 export class CartsController {
     constructor(private readonly cartsService: CartsService) {}
@@ -9,21 +22,19 @@ export class CartsController {
     @Get()
     getCart(
         @Param("storeId") storeId: string,
-        @Headers("x-customer-id") customerId: string,
+        @CurrentCustomer() customer: CustomerJwtPayload,
     ) {
-        const currentCustomerId = customerId ? Number(customerId) : 1;
-        return this.cartsService.getOrCreateCart(Number(storeId), currentCustomerId);
+        return this.cartsService.getOrCreateCart(Number(storeId), customer.sub);
     }
 
     // Add item to cart
     @Post("items")
     addItem(
         @Param("storeId") storeId: string,
-        @Headers("x-customer-id") customerId: string,
+        @CurrentCustomer() customer: CustomerJwtPayload,
         @Body() body: AddCartItemInput,
     ) {
-        const currentCustomerId = customerId ? Number(customerId) : 1;
-        return this.cartsService.addItemToCart(Number(storeId), currentCustomerId, body);
+        return this.cartsService.addItemToCart(Number(storeId), customer.sub, body);
     }
 
     // Update item quantity
@@ -31,13 +42,12 @@ export class CartsController {
     updateQuantity(
         @Param("storeId") storeId: string,
         @Param("itemId") itemId: string,
-        @Headers("x-customer-id") customerId: string,
+        @CurrentCustomer() customer: CustomerJwtPayload,
         @Body() body: UpdateCartItemInput,
     ) {
-        const currentCustomerId = customerId ? Number(customerId) : 1;
         return this.cartsService.updateItemQuantity(
             Number(storeId),
-            currentCustomerId,
+            customer.sub,
             Number(itemId),
             body.quantity,
         );
@@ -48,19 +58,17 @@ export class CartsController {
     removeItem(
         @Param("storeId") storeId: string,
         @Param("itemId") itemId: string,
-        @Headers("x-customer-id") customerId: string,
+        @CurrentCustomer() customer: CustomerJwtPayload,
     ) {
-        const currentCustomerId = customerId ? Number(customerId) : 1;
-        return this.cartsService.removeItem(Number(storeId), currentCustomerId, Number(itemId));
+        return this.cartsService.removeItem(Number(storeId), customer.sub, Number(itemId));
     }
 
     // Clear all items in cart
     @Delete()
     clearCart(
         @Param("storeId") storeId: string,
-        @Headers("x-customer-id") customerId: string,
+        @CurrentCustomer() customer: CustomerJwtPayload,
     ) {
-        const currentCustomerId = customerId ? Number(customerId) : 1;
-        return this.cartsService.clearCart(Number(storeId), currentCustomerId);
+        return this.cartsService.clearCart(Number(storeId), customer.sub);
     }
 }
