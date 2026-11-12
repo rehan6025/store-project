@@ -53,4 +53,29 @@ export class RedisService implements OnModuleInit,OnModuleDestroy{
             this.logger.error(`Failed to delete cache for key ${key}`, error);
         }
     }
+
+    async eval(script: string, keys: string[], args: string[]): Promise<any> {
+        try {
+            return await this.client.eval(script, {
+                keys,
+                arguments: args,
+            });
+        } catch (error) {
+            this.logger.error(`Failed to execute lua script on keys ${keys.join(",")}`, error);
+            throw error;
+        }
+    }
+
+    async incrBy(key: string, amount: number): Promise<number> {
+        try {
+            return await this.client.incrBy(key, amount);
+        } catch (error) {
+            this.logger.error(`Failed to increment key ${key}`, error);
+            throw error;
+        }
+    }
+
+    getClient(): RedisClient {
+        return this.client;
+    }
 }

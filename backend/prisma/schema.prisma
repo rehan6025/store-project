@@ -319,13 +319,13 @@ model Reservation {
   id          Int               @id @default(autoincrement())
   flashSaleId Int               @map("flash_sale_id")
   customerId  Int               @map("customer_id")
-  order_id    Int               @map("order_id")
+  order_id    Int?              @map("order_id")
   quantity    Int
   status      ReservationStatus @default(RESERVED)
   expiresAt   DateTime          @map("expires_at")
-  createdAt   DateTime          @map("created_at")
+  createdAt   DateTime          @default(now()) @map("created_at")
 
-  order     Order      @relation(fields: [order_id], references: [id])
+  order     Order?     @relation(fields: [order_id], references: [id])
   flashSale FlashSale? @relation(fields: [flashSaleId], references: [id])
   customer  Customer   @relation(fields: [customerId], references: [id])
 }
