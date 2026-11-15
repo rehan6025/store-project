@@ -6,12 +6,6 @@ import { ReservationStatus } from "../../generated/prisma/enums.js";
 export class FlashSalesRepository {
     constructor(private readonly prisma: PrismaService) {}
 
-    async findStoreById(storeId: number) {
-        return this.prisma.store.findUnique({
-            where: { id: storeId },
-        });
-    }
-
     async findProduct(storeId: number, productId: number) {
         return this.prisma.product.findFirst({
             where: {

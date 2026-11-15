@@ -11,6 +11,7 @@ import {
 import type { Request } from "express";
 import { OrdersService, type CheckoutInput } from "./orders.service.js";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard.js";
+import { StoreOwnerGuard } from "../auth/guards/store-owner.guard.js";
 import { CustomerAuthGuard } from "../customers/guards/customer-auth.guard.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { CurrentCustomer } from "../customers/decorators/current-customer.decorator.js";
@@ -22,18 +23,15 @@ export class OrdersController {
     constructor(private readonly ordersService: OrdersService) {}
 
     // Merchant view: list all orders for this store
-    @UseGuards(JwtAuthGuard)
+    @UseGuards(JwtAuthGuard, StoreOwnerGuard)
     @Get()
     getStoreOrders(
         @Param("storeId") storeId: string,
-        @CurrentUser() user: JwtPayload,
         @Query("limit") limit?: string,
         @Query("offset") offset?: string,
     ) {
-        const currentUserId = user ? Number(user.sub) : 1;
         return this.ordersService.getStoreOrders(
             Number(storeId),
-            currentUserId,
             limit ? Number(limit) : 20,
             offset ? Number(offset) : 0,
         );

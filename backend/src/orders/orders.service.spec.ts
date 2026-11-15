@@ -12,9 +12,12 @@ describe("OrdersService - checkout", () => {
     const txMock = {
         inventory: {
             updateMany: vi.fn(),
+            update: vi.fn(),
         },
         order: {
             create: vi.fn(),
+            findUnique: vi.fn(),
+            update: vi.fn(),
         },
         cartItem: {
             deleteMany: vi.fn(),
@@ -123,4 +126,52 @@ describe("OrdersService - checkout", () => {
         });
     });
 
+    describe("processOrderExpirationJob", () => {
+        it("cancels order and restocks inventory when order is pending", async () => {
+            const mockPendingOrder = {
+                id: 100,
+                status: OrderStatus.PENDING,
+                orderItems: [
+                    { productId: 5, quantity: 2 },
+                    { productId: 8, quantity: 1 },
+                ],
+            };
+
+            txMock.order.findUnique.mockResolvedValue(mockPendingOrder);
+            txMock.order.update.mockResolvedValue({ ...mockPendingOrder, status: OrderStatus.CANCELLED });
+            txMock.inventory.update.mockResolvedValue({});
+
+            const result = await service.processOrderExpirationJob({ orderId: 100 });
+
+            expect(result?.status).toBe(OrderStatus.CANCELLED);
+            expect(txMock.order.update).toHaveBeenCalledWith({
+                where: { id: 100 },
+                data: { status: OrderStatus.CANCELLED },
+            });
+            expect(txMock.inventory.update).toHaveBeenCalledWith({
+                where: { productId: 5 },
+                data: { stockCount: { increment: 2 } },
+            });
+            expect(txMock.inventory.update).toHaveBeenCalledWith({
+                where: { productId: 8 },
+                data: { stockCount: { increment: 1 } },
+            });
+        });
+
+        it("does nothing if order is already paid/confirmed", async () => {
+            const mockPaidOrder = {
+                id: 100,
+                status: OrderStatus.CONFIRMED,
+                orderItems: [{ productId: 5, quantity: 2 }],
+            };
+
+            txMock.order.findUnique.mockResolvedValue(mockPaidOrder);
+
+            const result = await service.processOrderExpirationJob({ orderId: 100 });
+
+            expect(result).toBeNull();
+            expect(txMock.order.update).not.toHaveBeenCalled();
+            expect(txMock.inventory.update).not.toHaveBeenCalled();
+        });
+    });
 });
