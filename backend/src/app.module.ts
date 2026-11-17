@@ -12,6 +12,7 @@ import { StoreConfigModule } from './store-config/store-config.module.js';
 import { RedisModule } from "./redis/redis.module.js";
 import { DomainsModule } from "./domains/domains.module.js";
 import { AuthModule } from "./auth/auth.module.js";
+import { FlashSalesModule } from "./flash-sales/flash-sales.module.js";
 
 @Module({
     imports: [
@@ -27,7 +28,8 @@ import { AuthModule } from "./auth/auth.module.js";
         PaymentsModule,
         StoreConfigModule,
         DomainsModule,
-        AuthModule
+        AuthModule,
+        FlashSalesModule,
     ],
 })
 export class AppModule {}

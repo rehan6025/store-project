@@ -1,6 +1,7 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
 import { OrdersRepository } from "./orders.repository.js";
 import { FullfillmentType, OrderStatus, ProductStatus } from "../../generated/prisma/enums.js";
+import { Queue, Worker } from "bullmq";
 
 export type CheckoutInput = {
     fulfillmentType: FullfillmentType;
@@ -8,19 +9,38 @@ export type CheckoutInput = {
 };
 
 @Injectable()
-export class OrdersService {
-    constructor(private readonly ordersRepository: OrdersRepository) {}
+export class OrdersService implements OnModuleInit, OnModuleDestroy {
+    private orderExpirationQueue?: Queue;
+    private orderExpirationWorker?: Worker;
 
-    // Rote plumbing: Store owner views all orders for their store
-    async getStoreOrders(storeId: number, userId: number, limit = 20, offset = 0) {
-        const store = await this.ordersRepository.getStore(storeId);
-        if (!store) {
-            throw new NotFoundException("Store not found");
-        }
-        if (store.ownerUserId !== userId) {
-            throw new ForbiddenException("You are not authorized to view orders for this store");
-        }
 
+    constructor(private readonly ordersRepository: OrdersRepository) { }
+
+    async onModuleInit() {
+        if (process.env.NODE_ENV === "test") return;
+
+        const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
+        const url = new URL(redisUrl);
+
+        const connection = { host: url.hostname || "localhost", port: Number(url.port) || 6379 }
+
+        this.orderExpirationQueue = new Queue("order-expirations", { connection });
+        this.orderExpirationWorker = new Worker(
+            "order-expirations",
+            async (job) => {
+                await this.processOrderExpirationJob(job.data as { orderId: number });
+            },
+            { connection, concurrency: 10 },
+        );
+    }
+
+    async onModuleDestroy() {
+        await this.orderExpirationWorker?.close();
+        await this.orderExpirationQueue?.close();
+    }
+
+    // Rote plumbing: Store owner views all orders for their store (secured by StoreOwnerGuard)
+    async getStoreOrders(storeId: number, limit = 20, offset = 0) {
         return await this.ordersRepository.findOrdersByStore(storeId, limit, offset);
     }
 
@@ -56,6 +76,34 @@ export class OrdersService {
         return order;
     }
 
+    async processOrderExpirationJob(data: { orderId: number }) {
+        return await this.ordersRepository.client.$transaction(async (tx) => {
+            const order = await tx.order.findUnique({
+                where: { id: data.orderId },
+                include: { orderItems: true }
+            })
+
+            if (!order || order.status !== OrderStatus.PENDING) {
+                return null;
+            }
+
+            const updated = await tx.order.update({
+                where: { id: order.id },
+                data: { status: OrderStatus.CANCELLED },
+            });
+
+            for (const item of order.orderItems) {
+                await tx.inventory.update({
+                    where: { productId: item.productId },
+                    data: {
+                        stockCount: { increment: item.quantity },
+                    },
+                });
+            }
+            return updated;
+        })
+    }
+
     // --- Decision-Heavy / The Checkout Engine Transaction Below ---
 
     async checkout(storeId: number, customerId: number, input: CheckoutInput) {
@@ -65,11 +113,11 @@ export class OrdersService {
             throw new NotFoundException("Store not found");
         }
 
-        if(input.fulfillmentType === FullfillmentType.DELIVERY && !store.allowsDelivery) {
+        if (input.fulfillmentType === FullfillmentType.DELIVERY && !store.allowsDelivery) {
             throw new BadRequestException("Store does not allow delivery");
         }
 
-        if(input.fulfillmentType === FullfillmentType.PICKUP && !store.allowsPickup) {
+        if (input.fulfillmentType === FullfillmentType.PICKUP && !store.allowsPickup) {
             throw new BadRequestException("Store does not allow pickup");
         }
 
@@ -78,7 +126,7 @@ export class OrdersService {
             throw new NotFoundException("Customer not found");
         }
 
-        if(input.fulfillmentType === FullfillmentType.DELIVERY && !input.deliveryAddress && !customer.address) {
+        if (input.fulfillmentType === FullfillmentType.DELIVERY && !input.deliveryAddress && !customer.address) {
             throw new BadRequestException("Delivery address is required");
         }
 
@@ -88,14 +136,14 @@ export class OrdersService {
         }
 
         const cartItems = cart.cartItems;
-        
-        return await this.ordersRepository.client.$transaction(async(tx) => {
-            for(const cartItem of cartItems) {
-                if(cartItem.product.status !== ProductStatus.ACTIVE) {
+
+        const createdOrder = await this.ordersRepository.client.$transaction(async (tx) => {
+            for (const cartItem of cartItems) {
+                if (cartItem.product.status !== ProductStatus.ACTIVE) {
                     throw new BadRequestException(`Product ${cartItem.product.name} is not active`);
                 }
                 const availableStock = cartItem.product.inventories?.stockCount ?? 0;
-                if(cartItem.quantity > availableStock) {
+                if (cartItem.quantity > availableStock) {
                     throw new BadRequestException(`Insufficient stock for product ${cartItem.product.name}`);
                 }
 
@@ -109,13 +157,13 @@ export class OrdersService {
                     },
                 });
 
-                if(result.count === 0) {
+                if (result.count === 0) {
                     throw new BadRequestException(`Insufficient stock for product ${cartItem.product.name}`);
                 }
 
             }
 
-            const totalAmount = cartItems.reduce((acc, item)=>{
+            const totalAmount = cartItems.reduce((acc, item) => {
                 return acc + item.quantity * Number(item.unitPrice);
             }, 0);
 
@@ -123,32 +171,44 @@ export class OrdersService {
 
             const order = await tx.order.create({
                 data: {
-                        storeId,
-                        customerId,
-                        status: OrderStatus.PENDING,
-                        fulfillmentType: input.fulfillmentType,
-                        totalAmount,
-                        currency: cart.cartItems[0]?.product.currency ?? "INR",
-                        deliveryAddressSnapshot: input.fulfillmentType === FullfillmentType.DELIVERY ? resolvedAddress : null,
-                        orderItems: {
-                            create: cartItems.map((item) => ({
-                                productId: item.productId,
-                                quantity: item.quantity,
-                                priceAtPurchase: item.unitPrice,
-                            })),
-                        },
+                    storeId,
+                    customerId,
+                    status: OrderStatus.PENDING,
+                    fulfillmentType: input.fulfillmentType,
+                    totalAmount,
+                    currency: cart.cartItems[0]?.product.currency ?? "INR",
+                    deliveryAddressSnapshot: input.fulfillmentType === FullfillmentType.DELIVERY ? resolvedAddress : null,
+                    orderItems: {
+                        create: cartItems.map((item) => ({
+                            productId: item.productId,
+                            quantity: item.quantity,
+                            priceAtPurchase: item.unitPrice,
+                        })),
                     },
-                    include: {
-                        orderItems: true,
-                    },
-                });
+                },
+                include: {
+                    orderItems: true,
+                },
+            });
 
             await tx.cartItem.deleteMany({
-                where :{ cartId : cart.id }
-            })
+                where: { cartId: cart.id }
+            });
 
             return order;
         });
- 
+
+        if (this.orderExpirationQueue) {
+            await this.orderExpirationQueue.add(
+                "expire-order",
+                { orderId: createdOrder.id },
+                {
+                    delay: 15 * 60 * 1000,
+                    jobId: `expire-order-${createdOrder.id}`,
+                },
+            );
+        }
+
+        return createdOrder;
     }
 }
